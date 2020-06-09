@@ -26,16 +26,20 @@ import com.google.android.exoplayer2.offline.DefaultDownloaderFactory;
 import com.google.android.exoplayer2.offline.DownloadManager;
 import com.google.android.exoplayer2.offline.DownloaderConstructorHelper;
 import com.google.android.exoplayer2.ui.DownloadNotificationHelper;
+import com.google.android.exoplayer2.upstream.DataSink;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
 import com.google.android.exoplayer2.upstream.FileDataSource;
 import com.google.android.exoplayer2.upstream.HttpDataSource;
 import com.google.android.exoplayer2.upstream.cache.Cache;
+import com.google.android.exoplayer2.upstream.cache.CacheDataSink;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSourceFactory;
 import com.google.android.exoplayer2.upstream.cache.NoOpCacheEvictor;
 import com.google.android.exoplayer2.upstream.cache.SimpleCache;
+import com.google.android.exoplayer2.upstream.crypto.AesCipherDataSink;
+import com.google.android.exoplayer2.upstream.crypto.AesCipherDataSource;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.Util;
 import java.io.File;
@@ -52,6 +56,8 @@ public class DemoApplication extends Application {
   private static final String DOWNLOAD_ACTION_FILE = "actions";
   private static final String DOWNLOAD_TRACKER_ACTION_FILE = "tracked_actions";
   private static final String DOWNLOAD_CONTENT_DIRECTORY = "downloads";
+
+  private static final byte[] KEY = Util.getUtf8Bytes("testKey:12345678");
 
   protected String userAgent;
 
@@ -132,7 +138,13 @@ public class DemoApplication extends Application {
       upgradeActionFile(
           DOWNLOAD_TRACKER_ACTION_FILE, downloadIndex, /* addNewDownloadsAsCompleted= */ true);
       DownloaderConstructorHelper downloaderConstructorHelper =
-          new DownloaderConstructorHelper(getDownloadCache(), buildHttpDataSourceFactory());
+          new DownloaderConstructorHelper(getDownloadCache(), buildHttpDataSourceFactory(),
+              () -> new AesCipherDataSource(KEY, new FileDataSource()),
+              () -> new AesCipherDataSink(KEY,
+                  new CacheDataSink(getDownloadCache(), -1),
+                  new byte[1024 * 32]),
+              /* priorityTaskManager= */ null);
+
       downloadManager =
           new DownloadManager(
               this, downloadIndex, new DefaultDownloaderFactory(downloaderConstructorHelper));
@@ -177,7 +189,7 @@ public class DemoApplication extends Application {
     return new CacheDataSourceFactory(
         cache,
         upstreamFactory,
-        new FileDataSource.Factory(),
+        () -> new AesCipherDataSource(KEY, new FileDataSource()),
         /* cacheWriteDataSinkFactory= */ null,
         CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR,
         /* eventListener= */ null);
